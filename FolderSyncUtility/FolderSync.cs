@@ -11,11 +11,6 @@ namespace FolderSyncUtility
         {
             DateTime lastSyncTime = GetLastSyncTime();
             PerformSync(sourceFolder, targetFolder, lastSyncTime, isPreview, excludePatterns);
-
-            if (!isPreview)
-            {
-                UpdateLastSyncTime();
-            }
         }
 
         private static DateTime GetLastSyncTime()
@@ -31,9 +26,17 @@ namespace FolderSyncUtility
             return DateTime.MinValue;
         }
 
-        private static void UpdateLastSyncTime()
+        public static void UpdateLastSyncTime()
         {
             File.WriteAllText(LastSyncFilePath, DateTime.Now.ToString());
+        }
+
+        public static void ResetLastSyncTime()
+        {
+            if (File.Exists(LastSyncFilePath))
+            {
+                File.Delete(LastSyncFilePath);
+            }
         }
 
         private static void PerformSync(string sourceFolder, string targetFolder, DateTime lastSyncTime, bool isPreview, string[] excludePatterns)
@@ -49,13 +52,24 @@ namespace FolderSyncUtility
                 Directory.CreateDirectory(targetFolder);
             }
 
+            bool filesCopied = SyncDirectory(sourceFolder, targetFolder, lastSyncTime, isPreview, excludePatterns);
+
+            if (!filesCopied)
+            {
+                Console.WriteLine($"Nothing to copy from '{sourceFolder}'.");
+            }
+        }
+
+        private static bool SyncDirectory(string sourceDir, string targetDir, DateTime lastSyncTime, bool isPreview, string[] excludePatterns)
+        {
             bool filesCopied = false;
 
-            foreach (string sourceFilePath in Directory.GetFiles(sourceFolder))
+            // Copy files
+            foreach (string sourceFilePath in Directory.GetFiles(sourceDir))
             {
                 FileInfo fileInfo = new FileInfo(sourceFilePath);
 
-                // Check exclusion patterns
+                // Check exclusion patterns for files
                 bool isExcluded = false;
                 foreach (var pattern in excludePatterns)
                 {
@@ -74,7 +88,7 @@ namespace FolderSyncUtility
 
                 if (fileInfo.LastWriteTime > lastSyncTime || fileInfo.CreationTime > lastSyncTime)
                 {
-                    string targetFilePath = Path.Combine(targetFolder, fileInfo.Name);
+                    string targetFilePath = Path.Combine(targetDir, fileInfo.Name);
                     if (isPreview)
                     {
                         Console.WriteLine($"[Preview] Would copy '{sourceFilePath}' to '{targetFilePath}'");
@@ -88,10 +102,49 @@ namespace FolderSyncUtility
                 }
             }
 
-            if (!filesCopied)
+            // Copy directories
+            foreach (string sourceSubDir in Directory.GetDirectories(sourceDir))
             {
-                Console.WriteLine($"Nothing to copy from '{sourceFolder}'.");
+                DirectoryInfo dirInfo = new DirectoryInfo(sourceSubDir);
+
+                // Check exclusion patterns for directories
+                bool isExcluded = false;
+                foreach (var pattern in excludePatterns)
+                {
+                    if (sourceSubDir.Contains(pattern))
+                    {
+                        isExcluded = true;
+                        break;
+                    }
+                }
+
+                if (isExcluded)
+                {
+                    Console.WriteLine($"Excluded directory '{sourceSubDir}' based on exclusion patterns.");
+                    continue;
+                }
+
+                string targetSubDir = Path.Combine(targetDir, dirInfo.Name);
+
+                if (!Directory.Exists(targetSubDir))
+                {
+                    if (isPreview)
+                    {
+                        Console.WriteLine($"[Preview] Would create directory '{targetSubDir}'");
+                    }
+                    else
+                    {
+                        Directory.CreateDirectory(targetSubDir);
+                        Console.WriteLine($"Created directory '{targetSubDir}'");
+                    }
+                }
+
+                // Recursively sync subdirectories
+                bool subDirFilesCopied = SyncDirectory(sourceSubDir, targetSubDir, lastSyncTime, isPreview, excludePatterns);
+                filesCopied = filesCopied || subDirFilesCopied;
             }
+
+            return filesCopied;
         }
     }
 }
