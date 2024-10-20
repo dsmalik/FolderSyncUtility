@@ -124,19 +124,26 @@ namespace FolderSyncUtility
                     }
                     else
                     {
-                        string relativePath = GetRelativePath(baseDir, sourceFilePath);
-                        zipArchive.CreateEntryFromFile(sourceFilePath, relativePath);
-                        LogMessage($"Added '{sourceFilePath}' to zip");
-
-                        currentZipSize += fileInfo.Length;
-                        if (currentZipSize > MaxZipSize)
+                        try
                         {
-                            zipArchive.Dispose();
-                            createdZipFiles.Add(tempZipFilePath);
-                            zipIndex++;
-                            currentZipSize = 0;
-                            tempZipFilePath = GetTempZipFilePath(baseDir, zipIndex);
-                            zipArchive = ZipFile.Open(tempZipFilePath, ZipArchiveMode.Create);
+                            string relativePath = GetRelativePath(baseDir, sourceFilePath);
+                            LogMessage($"Adding '{sourceFilePath}' to zip");
+                            zipArchive.CreateEntryFromFile(sourceFilePath, relativePath);
+
+                            currentZipSize += fileInfo.Length;
+                            if (currentZipSize > MaxZipSize)
+                            {
+                                zipArchive.Dispose();
+                                createdZipFiles.Add(tempZipFilePath);
+                                zipIndex++;
+                                currentZipSize = 0;
+                                tempZipFilePath = GetTempZipFilePath(baseDir, zipIndex);
+                                zipArchive = ZipFile.Open(tempZipFilePath, ZipArchiveMode.Create);
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            LogMessage($"Error adding '{sourceFilePath}' to zip: {ex.Message}");
                         }
                     }
                     filesCopied = true;
@@ -200,23 +207,20 @@ namespace FolderSyncUtility
                 string tempZipFilePath = createdZipFiles[i];
                 if (File.Exists(tempZipFilePath)) // Ensure the file exists before copying
                 {
-                    var index = i + 1;
-                    if (index == 1)
+                    try
                     {
-                        string targetZipFileName = $"{sourceFolderName}_{timestamp}.zip";
+                        var index = i + 1;
+                        string targetZipFileName = index == 1
+                            ? $"{sourceFolderName}_{timestamp}.zip"
+                            : $"{sourceFolderName}_{timestamp}_{index}.zip";
                         string targetZipFilePath = Path.Combine(targetFolder, targetZipFileName);
+                        LogMessage($"Copying zip file to '{targetZipFilePath}'");
                         File.Copy(tempZipFilePath, targetZipFilePath, true);
-                        LogMessage($"Copied zip file to '{targetZipFilePath}'");
-                        continue;
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        string targetZipFileName = $"{sourceFolderName}_{timestamp}_{i + 1}.zip";
-                        string targetZipFilePath = Path.Combine(targetFolder, targetZipFileName);
-                        File.Copy(tempZipFilePath, targetZipFilePath, true);
-                        LogMessage($"Copied zip file to '{targetZipFilePath}'");
+                        LogMessage($"Error copying zip file '{tempZipFilePath}' to target: {ex.Message}");
                     }
-
                 }
                 else
                 {
@@ -231,7 +235,15 @@ namespace FolderSyncUtility
             {
                 if (File.Exists(tempZipFilePath))
                 {
-                    File.Delete(tempZipFilePath);
+                    try
+                    {
+                        LogMessage($"Deleting temp zip file '{tempZipFilePath}'");
+                        File.Delete(tempZipFilePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogMessage($"Error deleting temp zip file '{tempZipFilePath}': {ex.Message}");
+                    }
                 }
             }
         }
