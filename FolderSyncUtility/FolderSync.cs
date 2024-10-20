@@ -48,7 +48,7 @@ namespace FolderSyncUtility
         {
             if (!Directory.Exists(sourceFolder))
             {
-                Console.WriteLine($"Source folder '{sourceFolder}' does not exist.");
+                LogMessage($"Source folder '{sourceFolder}' does not exist.");
                 return;
             }
 
@@ -61,14 +61,20 @@ namespace FolderSyncUtility
             string tempZipFilePath = GetTempZipFilePath(sourceFolder, zipIndex);
             List<string> createdZipFiles = new List<string>();
 
-            Console.WriteLine($"Temp zip file is at - {tempZipFilePath}");
+            LogMessage($"Temp zip file is at - {tempZipFilePath}");
+
+            if (File.Exists(tempZipFilePath))
+            {
+                LogMessage($"Temp zip file already exists. Deleting before creating new.");
+                File.Delete(tempZipFilePath);
+            }
 
             bool filesCopied;
             ZipArchive zipArchive = ZipFile.Open(tempZipFilePath, ZipArchiveMode.Create);
             try
             {
                 long currentZipSize = 0;
-                filesCopied = SyncDirectory(sourceFolder, ref zipArchive, lastSyncTime, isPreview, excludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
+                filesCopied = SyncDirectory(sourceFolder, sourceFolder, ref zipArchive, lastSyncTime, isPreview, excludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
             }
             finally
             {
@@ -84,7 +90,7 @@ namespace FolderSyncUtility
             DeleteTempZipFiles(createdZipFiles);
         }
 
-        private static bool SyncDirectory(string sourceDir, ref ZipArchive zipArchive, DateTime lastSyncTime, bool isPreview, string[] excludePatterns, ref int zipIndex, ref long currentZipSize, string targetFolder, List<string> createdZipFiles, ref string tempZipFilePath)
+        private static bool SyncDirectory(string baseDir, string sourceDir, ref ZipArchive zipArchive, DateTime lastSyncTime, bool isPreview, string[] excludePatterns, ref int zipIndex, ref long currentZipSize, string targetFolder, List<string> createdZipFiles, ref string tempZipFilePath)
         {
             bool filesCopied = false;
 
@@ -106,7 +112,7 @@ namespace FolderSyncUtility
 
                 if (isExcluded)
                 {
-                    Console.WriteLine($"Excluded '{sourceFilePath}' based on exclusion patterns.");
+                    LogMessage($"Excluded '{sourceFilePath}' based on exclusion patterns.");
                     continue;
                 }
 
@@ -114,13 +120,13 @@ namespace FolderSyncUtility
                 {
                     if (isPreview)
                     {
-                        Console.WriteLine($"[Preview] Would add '{sourceFilePath}' to zip");
+                        LogMessage($"[Preview] Would add '{sourceFilePath}' to zip");
                     }
                     else
                     {
-                        string relativePath = GetRelativePath(sourceDir, sourceFilePath);
+                        string relativePath = GetRelativePath(baseDir, sourceFilePath);
                         zipArchive.CreateEntryFromFile(sourceFilePath, relativePath);
-                        Console.WriteLine($"Added '{sourceFilePath}' to zip");
+                        LogMessage($"Added '{sourceFilePath}' to zip");
 
                         currentZipSize += fileInfo.Length;
                         if (currentZipSize > MaxZipSize)
@@ -129,7 +135,7 @@ namespace FolderSyncUtility
                             createdZipFiles.Add(tempZipFilePath);
                             zipIndex++;
                             currentZipSize = 0;
-                            tempZipFilePath = GetTempZipFilePath(sourceDir, zipIndex);
+                            tempZipFilePath = GetTempZipFilePath(baseDir, zipIndex);
                             zipArchive = ZipFile.Open(tempZipFilePath, ZipArchiveMode.Create);
                         }
                     }
@@ -155,12 +161,12 @@ namespace FolderSyncUtility
 
                 if (isExcluded)
                 {
-                    Console.WriteLine($"Excluded directory '{sourceSubDir}' based on exclusion patterns.");
+                    LogMessage($"Excluded directory '{sourceSubDir}' based on exclusion patterns.");
                     continue;
                 }
 
                 // Recursively sync subdirectories
-                bool subDirFilesCopied = SyncDirectory(sourceSubDir, ref zipArchive, lastSyncTime, isPreview, excludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
+                bool subDirFilesCopied = SyncDirectory(baseDir, sourceSubDir, ref zipArchive, lastSyncTime, isPreview, excludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
                 filesCopied = filesCopied || subDirFilesCopied;
             }
 
@@ -200,7 +206,7 @@ namespace FolderSyncUtility
                         string targetZipFileName = $"{sourceFolderName}_{timestamp}.zip";
                         string targetZipFilePath = Path.Combine(targetFolder, targetZipFileName);
                         File.Copy(tempZipFilePath, targetZipFilePath, true);
-                        Console.WriteLine($"Copied zip file to '{targetZipFilePath}'");
+                        LogMessage($"Copied zip file to '{targetZipFilePath}'");
                         continue;
                     }
                     else
@@ -208,13 +214,13 @@ namespace FolderSyncUtility
                         string targetZipFileName = $"{sourceFolderName}_{timestamp}_{i + 1}.zip";
                         string targetZipFilePath = Path.Combine(targetFolder, targetZipFileName);
                         File.Copy(tempZipFilePath, targetZipFilePath, true);
-                        Console.WriteLine($"Copied zip file to '{targetZipFilePath}'");
+                        LogMessage($"Copied zip file to '{targetZipFilePath}'");
                     }
-                    
+
                 }
                 else
                 {
-                    Console.WriteLine($"Temp zip file '{tempZipFilePath}' does not exist.");
+                    LogMessage($"Temp zip file '{tempZipFilePath}' does not exist.");
                 }
             }
         }
@@ -228,6 +234,13 @@ namespace FolderSyncUtility
                     File.Delete(tempZipFilePath);
                 }
             }
+        }
+
+        private static void LogMessage(string message)
+        {
+            string timestampedMessage = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss} - {message}";
+            Console.WriteLine(timestampedMessage);
+            File.AppendAllText(LogFilePath, timestampedMessage + Environment.NewLine);
         }
     }
 }
