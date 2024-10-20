@@ -12,10 +12,10 @@ namespace FolderSyncUtility
         private static readonly string LogFilePath = "syncLog.txt";
         private const long MaxZipSize = 100 * 1024 * 1024 * 5; // 500MB
 
-        public static void SyncFolders(string sourceFolder, string targetFolder, bool isPreview, string[] excludePatterns)
+        public static void SyncFolders(string sourceFolder, string targetFolder, bool isPreview, string[] fileExcludePatterns, string[] dirExcludePatterns)
         {
             DateTime lastSyncTime = GetLastSyncTime();
-            PerformSync(sourceFolder, targetFolder, lastSyncTime, isPreview, excludePatterns);
+            PerformSync(sourceFolder, targetFolder, lastSyncTime, isPreview, fileExcludePatterns, dirExcludePatterns);
         }
 
         private static DateTime GetLastSyncTime()
@@ -44,7 +44,7 @@ namespace FolderSyncUtility
             }
         }
 
-        private static void PerformSync(string sourceFolder, string targetFolder, DateTime lastSyncTime, bool isPreview, string[] excludePatterns)
+        private static void PerformSync(string sourceFolder, string targetFolder, DateTime lastSyncTime, bool isPreview, string[] fileExcludePatterns, string[] dirExcludePatterns)
         {
             if (!Directory.Exists(sourceFolder))
             {
@@ -74,7 +74,7 @@ namespace FolderSyncUtility
             try
             {
                 long currentZipSize = 0;
-                filesCopied = SyncDirectory(sourceFolder, sourceFolder, ref zipArchive, lastSyncTime, isPreview, excludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
+                filesCopied = SyncDirectory(sourceFolder, sourceFolder, ref zipArchive, lastSyncTime, isPreview, fileExcludePatterns, dirExcludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
             }
             finally
             {
@@ -90,7 +90,7 @@ namespace FolderSyncUtility
             DeleteTempZipFiles(createdZipFiles);
         }
 
-        private static bool SyncDirectory(string baseDir, string sourceDir, ref ZipArchive zipArchive, DateTime lastSyncTime, bool isPreview, string[] excludePatterns, ref int zipIndex, ref long currentZipSize, string targetFolder, List<string> createdZipFiles, ref string tempZipFilePath)
+        private static bool SyncDirectory(string baseDir, string sourceDir, ref ZipArchive zipArchive, DateTime lastSyncTime, bool isPreview, string[] fileExcludePatterns, string[] dirExcludePatterns, ref int zipIndex, ref long currentZipSize, string targetFolder, List<string> createdZipFiles, ref string tempZipFilePath)
         {
             bool filesCopied = false;
 
@@ -101,7 +101,7 @@ namespace FolderSyncUtility
 
                 // Check exclusion patterns for files
                 bool isExcluded = false;
-                foreach (var pattern in excludePatterns)
+                foreach (var pattern in fileExcludePatterns)
                 {
                     if (sourceFilePath.Contains(pattern))
                     {
@@ -112,6 +112,7 @@ namespace FolderSyncUtility
 
                 if (isExcluded)
                 {
+                    Program.TotalFilesExcluded++;
                     LogMessage($"Excluded '{sourceFilePath}' based on exclusion patterns.");
                     continue;
                 }
@@ -120,6 +121,7 @@ namespace FolderSyncUtility
                 {
                     if (isPreview)
                     {
+                        Program.TotalFilesToProcess++;
                         LogMessage($"[Preview] Would add '{sourceFilePath}' to zip");
                     }
                     else
@@ -157,9 +159,9 @@ namespace FolderSyncUtility
 
                 // Check exclusion patterns for directories
                 bool isExcluded = false;
-                foreach (var pattern in excludePatterns)
+                foreach (var pattern in dirExcludePatterns)
                 {
-                    if (sourceSubDir.Contains(pattern))
+                    if (sourceSubDir.EndsWith(pattern))
                     {
                         isExcluded = true;
                         break;
@@ -168,12 +170,13 @@ namespace FolderSyncUtility
 
                 if (isExcluded)
                 {
+                    Program.TotalDirectoriesExcluded++;
                     LogMessage($"Excluded directory '{sourceSubDir}' based on exclusion patterns.");
                     continue;
                 }
 
                 // Recursively sync subdirectories
-                bool subDirFilesCopied = SyncDirectory(baseDir, sourceSubDir, ref zipArchive, lastSyncTime, isPreview, excludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
+                bool subDirFilesCopied = SyncDirectory(baseDir, sourceSubDir, ref zipArchive, lastSyncTime, isPreview, fileExcludePatterns, dirExcludePatterns, ref zipIndex, ref currentZipSize, targetFolder, createdZipFiles, ref tempZipFilePath);
                 filesCopied = filesCopied || subDirFilesCopied;
             }
 

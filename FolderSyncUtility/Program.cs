@@ -7,18 +7,25 @@ namespace FolderSyncUtility
     internal class Program
     {
         private static readonly string DefaultExcludePatternsFile = "defaultExcludePatterns.txt";
+        private static readonly string DefaultExcludePatternsDirectory = "defaultExludePatternsForDirectories.txt";
+        private static readonly string FolderListFile = "sync_folders.txt";
+        private static readonly string LastSyncFile = "lastSync.txt";
+
+        internal static int TotalFilesToProcess = 0;
+        internal static int TotalFilesExcluded = 0;
+        internal static int TotalDirectoriesExcluded = 0;
 
         static void Main(string[] args)
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("Usage: FolderSyncUtility <folderListFile> [--preview] [--reset]");
+                Console.WriteLine("Usage: FolderSyncUtility [--preview] [--reset]");
                 return;
             }
 
             bool isPreview = false;
             bool resetLastSyncTime = false;
-            string folderListFile = null;
+            bool showLastSyncTime = false;
 
             foreach (var arg in args)
             {
@@ -30,9 +37,9 @@ namespace FolderSyncUtility
                 {
                     resetLastSyncTime = true;
                 }
-                else
+                else if (arg == "--lastsynctime")
                 {
-                    folderListFile = arg;
+                    showLastSyncTime = true;
                 }
             }
 
@@ -43,23 +50,30 @@ namespace FolderSyncUtility
                 return;
             }
 
-            if (string.IsNullOrEmpty(folderListFile))
+            if (showLastSyncTime)
             {
-                Console.WriteLine("Usage: FolderSyncUtility <folderListFile> [--preview] [--reset]");
+                if (!File.Exists(LastSyncFile))
+                {
+                    Console.WriteLine("Never synced in the past.");
+                    return;
+                }
+
+                Console.WriteLine($"Last sync time - {File.ReadAllText(LastSyncFile)}");
                 return;
             }
 
-            if (!File.Exists(folderListFile))
+            if (!File.Exists(FolderListFile))
             {
-                Console.WriteLine($"File '{folderListFile}' does not exist.");
+                Console.WriteLine($"File '{FolderListFile}' does not exist.");
                 return;
             }
 
             string[] defaultExcludePatterns = ReadDefaultExcludePatterns();
+            string[] defaultExcludePatternsForDirectories = ReadDefaultExcludePatternsForDirectories();
 
             List<(string source, string target, string[] excludePatterns)> folderPairs = new List<(string source, string target, string[] excludePatterns)>();
 
-            foreach (var line in File.ReadAllLines(folderListFile))
+            foreach (var line in File.ReadAllLines(FolderListFile))
             {
                 var parts = line.Split(new[] { "::::" }, StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length >= 2)
@@ -82,7 +96,7 @@ namespace FolderSyncUtility
 
             foreach (var (source, target, excludePatterns) in folderPairs)
             {
-                FolderSync.SyncFolders(source, target, isPreview, excludePatterns);
+                FolderSync.SyncFolders(source, target, isPreview, excludePatterns, defaultExcludePatternsForDirectories);
             }
 
             // Update last sync time after all sync operations are completed
@@ -90,6 +104,17 @@ namespace FolderSyncUtility
             {
                 FolderSync.UpdateLastSyncTime();
             }
+
+            Console.WriteLine($"Total files - {TotalFilesToProcess}, Files excluded - {TotalFilesExcluded}, Directories excluded - {TotalDirectoriesExcluded}");
+        }
+
+        private static string[] ReadDefaultExcludePatternsForDirectories()
+        {
+            if (File.Exists(DefaultExcludePatternsDirectory))
+            {
+                return File.ReadAllLines(DefaultExcludePatternsDirectory);
+            }
+            return new string[0];
         }
 
         private static string[] ReadDefaultExcludePatterns()
@@ -98,6 +123,7 @@ namespace FolderSyncUtility
             {
                 return File.ReadAllLines(DefaultExcludePatternsFile);
             }
+
             return new string[0];
         }
 

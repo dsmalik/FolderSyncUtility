@@ -1,0 +1,8 @@
+node_modules
+packages
+obj\Release
+obj\Debug
+bin\Release
+bin\Debug
+obj\x86
+obj\x64
